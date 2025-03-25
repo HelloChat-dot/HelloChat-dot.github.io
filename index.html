@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rocket Launch Game – Jarbt & Explosions</title>
+  <title>Rocket Launch Game – Jarbt Challenge</title>
   <style>
-    /* (Existing CSS remains unchanged) */
     body { margin: 0; background: #000; color: #eee; font-family: 'Arial', sans-serif; overflow: hidden; position: relative; }
     #menuContainer { position: relative; width: 1200px; height: 800px; margin: 20px auto; border: 2px solid #444; background: #000; }
     #menuCanvas { position: absolute; top: 0; left: 0; width: 1200px; height: 800px; z-index: 1; }
@@ -19,19 +18,25 @@
     #videoMessage, #videoContainer { position: absolute; right: 10px; z-index: 3; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid red; }
     #videoMessage { top: 50px; font-size: 24px; color: red; display: none; }
     #videoContainer { top: 100px; display: none; }
+    /* New stats styling */
+    .counter { font-size: 24px; margin: 5px 0; }
+    .counter.white { color: white; }
+    .counter.bronze { color: #cd7f32; }
+    .counter.silver { color: #c0c0c0; }
+    .counter.gold { color: #ffd700; }
+    #menuStats { position: absolute; top: 20px; left: 20px; text-align: left; }
   </style>
 </head>
 <body>
-  <!-- Main Menu Container -->
   <div id="menuContainer">
     <canvas id="menuCanvas" width="1200" height="800"></canvas>
     <div id="menuOverlay">
-      <h1>Rocket Launch Game</h1>
-      <p>
-        Test your landing skills among the stars! Dodge mountains, battle gravity,
-        and now face the ever‑present Jarbt.<br>
-        (Choose "Enable Jarbt" for a spooky challenge!)
-      </p>
+      <h1>Rocket Launch</h1>
+      <div id="menuStats">
+        <p class="counter">Deaths: <span id="deathCount" class="white">0</span></p>
+        <p class="counter">Wins: <span id="winCount" class="white">0</span></p>
+        <p class="counter">Best Streak: <span id="streakCount" class="white">0</span></p>
+      </div>
       <div class="controls">
         <label>
           <input type="checkbox" id="evilMoonToggle"> Enable Jarbt
@@ -41,22 +46,18 @@
       </div>
     </div>
   </div>
-  
+
   <canvas id="gameCanvas" width="1200" height="800"></canvas>
   
   <div id="instructions">
     <p>
-      <strong>Controls:</strong> Left/Right arrows to rotate, Up arrow for thrust.<br>
-      Land on the <span style="color:#0f0;">GREEN</span> platform (solid &amp; elevated) to win.<br>
-      The <span style="color:#00f;">BLUE</span> platform is your safe starting pad.<br>
-      Beware of mountains, the planet—and watch out for Jarbt!<br>
-      If you stray too far, a red warning appears.<br>
-      After a crash your ship explodes and drifts off; if <strong>Jarbt</strong>
-      smashes you, debris flies everywhere!<br>
-      Press <strong>R</strong> to try again, or <strong>M</strong> for menu.
+      <strong>Controls:</strong> ←/→ Rotate • ↑ Thrust<br>
+      <strong>Goal:</strong> Land on GREEN platform<br>
+      <strong>Avoid:</strong> Crashing or drifting too far<br>
+      <strong>Restart:</strong> R • <strong>Menu:</strong> M
     </p>
   </div>
-  
+
   <div id="videoMessage">Jarbt sends his regards</div>
   <div id="videoContainer"></div>
 
@@ -70,6 +71,17 @@
     const winSound = new Audio('win.mp3');
     menuAmbience.loop = true;
     gameAmbience.loop = true;
+
+    // Game statistics
+    let gameStats = {
+      totalWins: 0,
+      consecutiveWins: 0,
+      totalDeaths: 0,
+      highestStreak: 0
+    };
+
+    // Jarbt sound interval
+    let jarbtInterval;
 
     // Load textures
     const planetImage = new Image();
@@ -194,6 +206,13 @@
       if (evilMoonEnabled) {
         moon.vel = { x: 0, y: 0 };
         moonBurstTimer = 2 + Math.random() * 3;
+        // Start Jarbt sound interval
+        jarbtInterval = setInterval(() => {
+          if(gameState === "playing" && Math.random() < 0.3) {
+            jarbtSound.currentTime = 0;
+            jarbtSound.play();
+          }
+        }, 10000 + Math.random() * 50000); // 10-60 seconds
       }
       
       lastTimeStamp = performance.now();
@@ -406,6 +425,12 @@
       } else if (gameState === "playing") {
         if (pointInRotatedRect(rocket.pos, winningPlatformCenter, winningPlatformDrawAngle, winningPlatformWidth, winningPlatformHeight)) {
           gameState = "win";
+          gameStats.totalWins++;
+          gameStats.consecutiveWins++;
+          if(gameStats.consecutiveWins > gameStats.highestStreak) {
+            gameStats.highestStreak = gameStats.consecutiveWins;
+          }
+          updateCounterColors();
           rocket.pos = { x: winningPlatformCenter.x, y: winningPlatformCenter.y };
           winSound.currentTime = 0;
           winSound.play();
@@ -539,11 +564,12 @@
         rocket.vel.x += (Math.random() - 0.5) * 10;
         rocket.vel.y += (Math.random() - 0.5) * 10;
         spawnExplosion();
+        gameStats.totalDeaths++;
         deathSound.currentTime = 0;
         deathSound.play();
         if (crashByMoon) {
-          jarbtSound.currentTime = 0;
-          jarbtSound.play();
+          deathSound.volume = 0.3;
+          setTimeout(() => deathSound.volume = 1.0, 300);
           evilMoonKillCount++;
           if (evilMoonKillCount % 10 === 0) {
             showEvilMoonVideo();
@@ -761,12 +787,33 @@
     /* ===== MENU FUNCTIONS ===== */
     function showMenu() {
       cancelAnimationFrame(gameLoopId);
+      document.getElementById("deathCount").textContent = gameStats.totalDeaths;
+      document.getElementById("winCount").textContent = gameStats.totalWins;
+      document.getElementById("streakCount").textContent = gameStats.highestStreak;
+      gameStats.consecutiveWins = 0;
+      clearInterval(jarbtInterval);
       document.getElementById("menuContainer").style.display = "block";
       document.getElementById("gameCanvas").style.display = "none";
       document.getElementById("instructions").style.display = "none";
       gameAmbience.pause();
       menuAmbience.play();
       drawMenuBackground();
+      updateCounterColors();
+    }
+
+    function updateCounterColors() {
+      const elements = {
+        winCount: gameStats.totalWins,
+        streakCount: gameStats.highestStreak
+      };
+
+      for (const [id, value] of Object.entries(elements)) {
+        const element = document.getElementById(id);
+        element.className = 
+          value >= 50 ? 'counter gold' :
+          value >= 25 ? 'counter silver' :
+          value >= 10 ? 'counter bronze' : 'counter white';
+      }
     }
     
     function startGame() {
